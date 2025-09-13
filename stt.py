@@ -8,7 +8,8 @@ def transcribe_chunk(filepath):
     Worker function to transcribe a single audio chunk.
     A new model object is created in each process to avoid issues with sharing.
     """
-    print(f"Processing {os.path.basename(filepath)} in a separate process...")
+    # This print statement now happens inside the worker process
+    # print(f"Processing {os.path.basename(filepath)}...") 
     model = whisper.load_model("base")
     result = model.transcribe(filepath, language='ko')
     return result.get("text", "").strip()
@@ -26,24 +27,28 @@ def main():
         print(f"Error: The directory '{audio_chunks_folder}' was not found.")
         return
 
-    if not files:
+    if not filepaths:
         print(f"No 'chunk_*.mp3' files found in '{audio_chunks_folder}'.")
         return
 
     # Use a pool of processes to transcribe chunks in parallel
-    # Using cpu_count() is a good default for the number of processes
     num_processes = min(cpu_count(), len(filepaths))
-    print(f"Found {len(files)} audio chunks. Processing them in parallel using {num_processes} processes.")
+    print(f"Found {len(filepaths)} audio chunks. Processing in parallel using {num_processes} processes.")
+
+    # Clear the output file before starting
+    with open(output_file, "w", encoding="utf-8") as f:
+        pass
+    
+    print(f"Results will be written to {output_file} as they are completed.")
 
     with Pool(num_processes) as pool:
-        # map applies the function to each item in the list and returns results in order
-        transcribed_texts = pool.map(transcribe_chunk, filepaths)
-
-    # Write the final results to the output file
-    print(f"All chunks processed. Saving result to {output_file}...")
-    with open(output_file, "w", encoding="utf-8") as f:
-        # Join the results with a space, similar to the original intent
-        f.write(" ".join(transcribed_texts))
+        # Use imap to get results as they are completed, while preserving order.
+        results_iterator = pool.imap(transcribe_chunk, filepaths)
+        
+        for i, transcribed_text in enumerate(results_iterator):
+            with open(output_file, "a", encoding="utf-8") as f:
+                f.write(transcribed_text + " ")
+            print(f"Finished processing and saved chunk {i + 1}/{len(filepaths)}.")
 
     print("Processing complete.")
 
