@@ -1,23 +1,51 @@
 import whisper
+import os
+from multiprocessing import Pool, cpu_count
 
-model = whisper.load_model("base")
-audio = whisper.load_audio("audio.mp3")
+# It's important to have a separate transcription function for each process
+def transcribe_chunk(filepath):
+    """
+    Worker function to transcribe a single audio chunk.
+    A new model object is created in each process to avoid issues with sharing.
+    """
+    print(f"Processing {os.path.basename(filepath)} in a separate process...")
+    model = whisper.load_model("base")
+    result = model.transcribe(filepath, language='ko')
+    return result.get("text", "").strip()
 
-# Using word_timestamps=True to get token-level data.
-# Note: This requires a recent version of openai-whisper.
-result = model.transcribe(audio, language='ko', word_timestamps=True)
+def main():
+    # Folder containing audio chunks
+    audio_chunks_folder = "data1_audio_chunks"
+    output_file = "result.txt"
 
-with open("result.txt", "w", encoding="utf-8") as f:
-    if result.get("segments") and result["segments"] and result["segments"][0].get("words"):
-        f.write("Token analysis (word timestamps):\n")
-        for segment in result["segments"]:
-            for word in segment["words"]:
-                start = word['start']
-                end = word['end']
-                text = word['word']
-                f.write(f"[{start:.2f} -> {end:.2f}] {text}\n")
-    else:
-        f.write("Could not get word-level timestamps. Saving full transcript instead:\n")
-        f.write(result.get("text", "Transcription failed."))
+    # Get all chunk files and sort them to process in order
+    try:
+        files = sorted([f for f in os.listdir(audio_chunks_folder) if f.startswith("chunk_") and f.endswith(".mp3")])
+        filepaths = [os.path.join(audio_chunks_folder, f) for f in files]
+    except FileNotFoundError:
+        print(f"Error: The directory '{audio_chunks_folder}' was not found.")
+        return
 
-print("Processing complete. Results saved to result.txt")
+    if not files:
+        print(f"No 'chunk_*.mp3' files found in '{audio_chunks_folder}'.")
+        return
+
+    # Use a pool of processes to transcribe chunks in parallel
+    # Using cpu_count() is a good default for the number of processes
+    num_processes = min(cpu_count(), len(filepaths))
+    print(f"Found {len(files)} audio chunks. Processing them in parallel using {num_processes} processes.")
+
+    with Pool(num_processes) as pool:
+        # map applies the function to each item in the list and returns results in order
+        transcribed_texts = pool.map(transcribe_chunk, filepaths)
+
+    # Write the final results to the output file
+    print(f"All chunks processed. Saving result to {output_file}...")
+    with open(output_file, "w", encoding="utf-8") as f:
+        # Join the results with a space, similar to the original intent
+        f.write(" ".join(transcribed_texts))
+
+    print("Processing complete.")
+
+if __name__ == "__main__":
+    main()
