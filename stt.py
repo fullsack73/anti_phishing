@@ -2,15 +2,9 @@ import whisper
 import os
 from multiprocessing import Pool, cpu_count
 
-# It's important to have a separate transcription function for each process
 def transcribe_chunk(filepath):
-    """
-    Worker function to transcribe a single audio chunk.
-    A new model object is created in each process to avoid issues with sharing.
-    """
-    # This print statement now happens inside the worker process
-    # print(f"Processing {os.path.basename(filepath)}...") 
-    model = whisper.load_model("base")
+    # tiny, base, small, medium, large
+    model = whisper.load_model("small")
     result = model.transcribe(filepath, language='ko')
     return result.get("text", "").strip()
 
